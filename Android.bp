@@ -44,7 +44,7 @@ rust_library {
     host_supported: true,
     crate_name: "bstr",
     srcs: ["src/lib.rs"],
-    edition: "2015",
+    edition: "2018",
     features: [
         "default",
         "lazy_static",
@@ -62,5 +62,5 @@ rust_library {
 // dependent_library ["feature_list"]
 //   byteorder-1.4.3
 //   lazy_static-1.4.0
-//   memchr-2.3.4 "std,use_std"
+//   memchr-2.4.0 "std"
 //   regex-automata-0.1.9
