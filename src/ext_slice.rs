@@ -5,21 +5,22 @@ use std::ffi::OsStr;
 #[cfg(feature = "std")]
 use std::path::Path;
 
-use core::{iter, ops, ptr, slice, str};
-use memchr::{memchr, memmem, memrchr};
+use core::{cmp, iter, ops, ptr, slice, str};
+use memchr::{memchr, memrchr};
 
-use crate::ascii;
-use crate::bstr::BStr;
-use crate::byteset;
+use ascii;
+use bstr::BStr;
+use byteset;
 #[cfg(feature = "std")]
-use crate::ext_vec::ByteVec;
+use ext_vec::ByteVec;
+use search::{PrefilterState, TwoWay};
 #[cfg(feature = "unicode")]
-use crate::unicode::{
+use unicode::{
     whitespace_len_fwd, whitespace_len_rev, GraphemeIndices, Graphemes,
     SentenceIndices, Sentences, WordIndices, Words, WordsWithBreakIndices,
     WordsWithBreaks,
 };
-use crate::utf8::{self, CharIndices, Chars, Utf8Chunks, Utf8Error};
+use utf8::{self, CharIndices, Chars, Utf8Chunks, Utf8Error};
 
 /// A short-hand constructor for building a `&[u8]`.
 ///
@@ -343,7 +344,7 @@ pub trait ByteSlice: Sealed {
     /// ```
     #[cfg(feature = "std")]
     #[inline]
-    fn to_str_lossy(&self) -> Cow<'_, str> {
+    fn to_str_lossy(&self) -> Cow<str> {
         match utf8::validate(self.as_bytes()) {
             Ok(()) => {
                 // SAFETY: This is safe because of the guarantees provided by
@@ -487,10 +488,10 @@ pub trait ByteSlice: Sealed {
     /// ```
     #[cfg(feature = "std")]
     #[inline]
-    fn to_os_str_lossy(&self) -> Cow<'_, OsStr> {
+    fn to_os_str_lossy(&self) -> Cow<OsStr> {
         #[cfg(unix)]
         #[inline]
-        fn imp(bytes: &[u8]) -> Cow<'_, OsStr> {
+        fn imp(bytes: &[u8]) -> Cow<OsStr> {
             use std::os::unix::ffi::OsStrExt;
 
             Cow::Borrowed(OsStr::from_bytes(bytes))
@@ -558,7 +559,7 @@ pub trait ByteSlice: Sealed {
     /// ```
     #[cfg(feature = "std")]
     #[inline]
-    fn to_path_lossy(&self) -> Cow<'_, Path> {
+    fn to_path_lossy(&self) -> Cow<Path> {
         use std::path::PathBuf;
 
         match self.to_os_str_lossy() {
@@ -1066,7 +1067,7 @@ pub trait ByteSlice: Sealed {
     /// assert_eq!(0, B("  \n\t\u{2003}\n  \t").fields().count());
     /// ```
     #[inline]
-    fn fields(&self) -> Fields<'_> {
+    fn fields(&self) -> Fields {
         Fields::new(self.as_bytes())
     }
 
@@ -1098,7 +1099,7 @@ pub trait ByteSlice: Sealed {
     /// assert_eq!(0, b"1911354563".fields_with(|c| c.is_numeric()).count());
     /// ```
     #[inline]
-    fn fields_with<F: FnMut(char) -> bool>(&self, f: F) -> FieldsWith<'_, F> {
+    fn fields_with<F: FnMut(char) -> bool>(&self, f: F) -> FieldsWith<F> {
         FieldsWith::new(self.as_bytes(), f)
     }
 
@@ -1618,7 +1619,7 @@ pub trait ByteSlice: Sealed {
     /// assert_eq!(bytes, bs);
     /// ```
     #[inline]
-    fn bytes(&self) -> Bytes<'_> {
+    fn bytes(&self) -> Bytes {
         Bytes { it: self.as_bytes().iter() }
     }
 
@@ -1648,7 +1649,7 @@ pub trait ByteSlice: Sealed {
     /// assert_eq!(vec!['a', '\u{FFFD}', '𝞃', '\u{FFFD}', '☃'], chars);
     /// ```
     #[inline]
-    fn chars(&self) -> Chars<'_> {
+    fn chars(&self) -> Chars {
         Chars::new(self.as_bytes())
     }
 
@@ -1703,7 +1704,7 @@ pub trait ByteSlice: Sealed {
     /// ]);
     /// ```
     #[inline]
-    fn char_indices(&self) -> CharIndices<'_> {
+    fn char_indices(&self) -> CharIndices {
         CharIndices::new(self.as_bytes())
     }
 
@@ -1740,7 +1741,7 @@ pub trait ByteSlice: Sealed {
     /// assert_eq!(invalid_chunks, vec![b"\xFD", b"\xFE", b"\xFF"]);
     /// ```
     #[inline]
-    fn utf8_chunks(&self) -> Utf8Chunks<'_> {
+    fn utf8_chunks(&self) -> Utf8Chunks {
         Utf8Chunks { bytes: self.as_bytes() }
     }
 
@@ -1772,7 +1773,7 @@ pub trait ByteSlice: Sealed {
     /// ```
     #[cfg(feature = "unicode")]
     #[inline]
-    fn graphemes(&self) -> Graphemes<'_> {
+    fn graphemes(&self) -> Graphemes {
         Graphemes::new(self.as_bytes())
     }
 
@@ -1816,7 +1817,7 @@ pub trait ByteSlice: Sealed {
     /// ```
     #[cfg(feature = "unicode")]
     #[inline]
-    fn grapheme_indices(&self) -> GraphemeIndices<'_> {
+    fn grapheme_indices(&self) -> GraphemeIndices {
         GraphemeIndices::new(self.as_bytes())
     }
 
@@ -1852,7 +1853,7 @@ pub trait ByteSlice: Sealed {
     /// ```
     #[cfg(feature = "unicode")]
     #[inline]
-    fn words(&self) -> Words<'_> {
+    fn words(&self) -> Words {
         Words::new(self.as_bytes())
     }
 
@@ -1890,7 +1891,7 @@ pub trait ByteSlice: Sealed {
     /// ```
     #[cfg(feature = "unicode")]
     #[inline]
-    fn word_indices(&self) -> WordIndices<'_> {
+    fn word_indices(&self) -> WordIndices {
         WordIndices::new(self.as_bytes())
     }
 
@@ -1920,7 +1921,7 @@ pub trait ByteSlice: Sealed {
     /// ```
     #[cfg(feature = "unicode")]
     #[inline]
-    fn words_with_breaks(&self) -> WordsWithBreaks<'_> {
+    fn words_with_breaks(&self) -> WordsWithBreaks {
         WordsWithBreaks::new(self.as_bytes())
     }
 
@@ -1957,7 +1958,7 @@ pub trait ByteSlice: Sealed {
     /// ```
     #[cfg(feature = "unicode")]
     #[inline]
-    fn words_with_break_indices(&self) -> WordsWithBreakIndices<'_> {
+    fn words_with_break_indices(&self) -> WordsWithBreakIndices {
         WordsWithBreakIndices::new(self.as_bytes())
     }
 
@@ -1989,7 +1990,7 @@ pub trait ByteSlice: Sealed {
     /// ```
     #[cfg(feature = "unicode")]
     #[inline]
-    fn sentences(&self) -> Sentences<'_> {
+    fn sentences(&self) -> Sentences {
         Sentences::new(self.as_bytes())
     }
 
@@ -2023,7 +2024,7 @@ pub trait ByteSlice: Sealed {
     /// ```
     #[cfg(feature = "unicode")]
     #[inline]
-    fn sentence_indices(&self) -> SentenceIndices<'_> {
+    fn sentence_indices(&self) -> SentenceIndices {
         SentenceIndices::new(self.as_bytes())
     }
 
@@ -2054,7 +2055,7 @@ pub trait ByteSlice: Sealed {
     /// ]);
     /// ```
     #[inline]
-    fn lines(&self) -> Lines<'_> {
+    fn lines(&self) -> Lines {
         Lines::new(self.as_bytes())
     }
 
@@ -2098,7 +2099,7 @@ pub trait ByteSlice: Sealed {
     /// ]);
     /// ```
     #[inline]
-    fn lines_with_terminator(&self) -> LinesWithTerminator<'_> {
+    fn lines_with_terminator(&self) -> LinesWithTerminator {
         LinesWithTerminator::new(self.as_bytes())
     }
 
@@ -2788,7 +2789,7 @@ pub trait ByteSlice: Sealed {
     #[cfg(feature = "unicode")]
     #[inline]
     fn reverse_graphemes(&mut self) {
-        use crate::unicode::decode_grapheme;
+        use unicode::decode_grapheme;
 
         let mut i = 0;
         loop {
@@ -2985,13 +2986,15 @@ pub trait ByteSlice: Sealed {
 /// version which permits building a `Finder` that is not connected to the
 /// lifetime of its needle.
 #[derive(Clone, Debug)]
-pub struct Finder<'a>(memmem::Finder<'a>);
+pub struct Finder<'a> {
+    searcher: TwoWay<'a>,
+}
 
 impl<'a> Finder<'a> {
     /// Create a new finder for the given needle.
     #[inline]
     pub fn new<B: ?Sized + AsRef<[u8]>>(needle: &'a B) -> Finder<'a> {
-        Finder(memmem::Finder::new(needle.as_ref()))
+        Finder { searcher: TwoWay::forward(needle.as_ref()) }
     }
 
     /// Convert this finder into its owned variant, such that it no longer
@@ -3004,7 +3007,7 @@ impl<'a> Finder<'a> {
     #[cfg(feature = "std")]
     #[inline]
     pub fn into_owned(self) -> Finder<'static> {
-        Finder(self.0.into_owned())
+        Finder { searcher: self.searcher.into_owned() }
     }
 
     /// Returns the needle that this finder searches for.
@@ -3015,7 +3018,7 @@ impl<'a> Finder<'a> {
     /// needle returned must necessarily be the shorter of the two.
     #[inline]
     pub fn needle(&self) -> &[u8] {
-        self.0.needle()
+        self.searcher.needle()
     }
 
     /// Returns the index of the first occurrence of this needle in the given
@@ -3047,7 +3050,7 @@ impl<'a> Finder<'a> {
     /// ```
     #[inline]
     pub fn find<B: AsRef<[u8]>>(&self, haystack: B) -> Option<usize> {
-        self.0.find(haystack.as_ref())
+        self.searcher.find(haystack.as_ref())
     }
 }
 
@@ -3068,13 +3071,15 @@ impl<'a> Finder<'a> {
 /// version which permits building a `FinderReverse` that is not connected to
 /// the lifetime of its needle.
 #[derive(Clone, Debug)]
-pub struct FinderReverse<'a>(memmem::FinderRev<'a>);
+pub struct FinderReverse<'a> {
+    searcher: TwoWay<'a>,
+}
 
 impl<'a> FinderReverse<'a> {
     /// Create a new reverse finder for the given needle.
     #[inline]
     pub fn new<B: ?Sized + AsRef<[u8]>>(needle: &'a B) -> FinderReverse<'a> {
-        FinderReverse(memmem::FinderRev::new(needle.as_ref()))
+        FinderReverse { searcher: TwoWay::reverse(needle.as_ref()) }
     }
 
     /// Convert this finder into its owned variant, such that it no longer
@@ -3087,7 +3092,7 @@ impl<'a> FinderReverse<'a> {
     #[cfg(feature = "std")]
     #[inline]
     pub fn into_owned(self) -> FinderReverse<'static> {
-        FinderReverse(self.0.into_owned())
+        FinderReverse { searcher: self.searcher.into_owned() }
     }
 
     /// Returns the needle that this finder searches for.
@@ -3098,7 +3103,7 @@ impl<'a> FinderReverse<'a> {
     /// the needle returned must necessarily be the shorter of the two.
     #[inline]
     pub fn needle(&self) -> &[u8] {
-        self.0.needle()
+        self.searcher.needle()
     }
 
     /// Returns the index of the last occurrence of this needle in the given
@@ -3130,7 +3135,7 @@ impl<'a> FinderReverse<'a> {
     /// ```
     #[inline]
     pub fn rfind<B: AsRef<[u8]>>(&self, haystack: B) -> Option<usize> {
-        self.0.rfind(haystack.as_ref())
+        self.searcher.rfind(haystack.as_ref())
     }
 }
 
@@ -3142,14 +3147,17 @@ impl<'a> FinderReverse<'a> {
 /// byte string being looked for.
 #[derive(Debug)]
 pub struct Find<'a> {
-    it: memmem::FindIter<'a, 'a>,
     haystack: &'a [u8],
-    needle: &'a [u8],
+    prestate: PrefilterState,
+    searcher: TwoWay<'a>,
+    pos: usize,
 }
 
 impl<'a> Find<'a> {
     fn new(haystack: &'a [u8], needle: &'a [u8]) -> Find<'a> {
-        Find { it: memmem::find_iter(haystack, needle), haystack, needle }
+        let searcher = TwoWay::forward(needle);
+        let prestate = searcher.prefilter_state();
+        Find { haystack, prestate, searcher, pos: 0 }
     }
 }
 
@@ -3158,7 +3166,20 @@ impl<'a> Iterator for Find<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<usize> {
-        self.it.next()
+        if self.pos > self.haystack.len() {
+            return None;
+        }
+        let result = self
+            .searcher
+            .find_with(&mut self.prestate, &self.haystack[self.pos..]);
+        match result {
+            None => None,
+            Some(i) => {
+                let pos = self.pos + i;
+                self.pos = pos + cmp::max(1, self.searcher.needle().len());
+                Some(pos)
+            }
+        }
     }
 }
 
@@ -3170,18 +3191,20 @@ impl<'a> Iterator for Find<'a> {
 /// byte string being looked for.
 #[derive(Debug)]
 pub struct FindReverse<'a> {
-    it: memmem::FindRevIter<'a, 'a>,
     haystack: &'a [u8],
-    needle: &'a [u8],
+    prestate: PrefilterState,
+    searcher: TwoWay<'a>,
+    /// When searching with an empty needle, this gets set to `None` after
+    /// we've yielded the last element at `0`.
+    pos: Option<usize>,
 }
 
 impl<'a> FindReverse<'a> {
     fn new(haystack: &'a [u8], needle: &'a [u8]) -> FindReverse<'a> {
-        FindReverse {
-            it: memmem::rfind_iter(haystack, needle),
-            haystack,
-            needle,
-        }
+        let searcher = TwoWay::reverse(needle);
+        let prestate = searcher.prefilter_state();
+        let pos = Some(haystack.len());
+        FindReverse { haystack, prestate, searcher, pos }
     }
 
     fn haystack(&self) -> &'a [u8] {
@@ -3189,7 +3212,7 @@ impl<'a> FindReverse<'a> {
     }
 
     fn needle(&self) -> &[u8] {
-        self.needle
+        self.searcher.needle()
     }
 }
 
@@ -3198,7 +3221,24 @@ impl<'a> Iterator for FindReverse<'a> {
 
     #[inline]
     fn next(&mut self) -> Option<usize> {
-        self.it.next()
+        let pos = match self.pos {
+            None => return None,
+            Some(pos) => pos,
+        };
+        let result = self
+            .searcher
+            .rfind_with(&mut self.prestate, &self.haystack[..pos]);
+        match result {
+            None => None,
+            Some(i) => {
+                if pos == i {
+                    self.pos = pos.checked_sub(1);
+                } else {
+                    self.pos = Some(i);
+                }
+                Some(i)
+            }
+        }
     }
 }
 
@@ -3358,7 +3398,7 @@ impl<'a> Iterator for Split<'a> {
         match self.finder.next() {
             Some(start) => {
                 let next = &haystack[self.last..start];
-                self.last = start + self.finder.needle.len();
+                self.last = start + self.finder.searcher.needle().len();
                 Some(next)
             }
             None => {
@@ -3593,8 +3633,8 @@ impl<'a> Iterator for LinesWithTerminator<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::ext_slice::{ByteSlice, B};
-    use crate::tests::LOSSY_TESTS;
+    use ext_slice::{ByteSlice, B};
+    use tests::LOSSY_TESTS;
 
     #[test]
     fn to_str_lossy() {

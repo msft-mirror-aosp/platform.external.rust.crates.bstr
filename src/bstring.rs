@@ -1,4 +1,4 @@
-use crate::bstr::BStr;
+use bstr::BStr;
 
 /// A wrapper for `Vec<u8>` that provides convenient string oriented trait
 /// impls.
