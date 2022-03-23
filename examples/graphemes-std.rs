@@ -1,3 +1,5 @@
+extern crate unicode_segmentation;
+
 use std::error::Error;
 use std::io::{self, BufRead, Write};
 
@@ -16,7 +18,8 @@ fn main() -> Result<(), Box<dyn Error>> {
             .take(10)
             .last()
             .unwrap_or(line.len());
-        stdout.write_all(line[..end].trim_end().as_bytes())?;
+        #[allow(deprecated)] // for Rust 1.28.0
+        stdout.write_all(line[..end].trim_right().as_bytes())?;
         stdout.write_all(b"\n")?;
 
         line.clear();

@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+
 use std::borrow::Cow;
 use std::error;
 use std::ffi::{OsStr, OsString};
@@ -9,8 +11,8 @@ use std::ptr;
 use std::str;
 use std::vec;
 
-use crate::ext_slice::ByteSlice;
-use crate::utf8::{self, Utf8Error};
+use ext_slice::ByteSlice;
+use utf8::{self, Utf8Error};
 
 /// Concatenate the elements given by the iterator together into a single
 /// `Vec<u8>`.
@@ -875,7 +877,7 @@ pub trait ByteVec: Sealed {
     /// assert_eq!(s, "foar".as_bytes());
     /// ```
     #[inline]
-    fn drain_bytes<R>(&mut self, range: R) -> DrainBytes<'_>
+    fn drain_bytes<R>(&mut self, range: R) -> DrainBytes
     where
         R: ops::RangeBounds<usize>,
     {
@@ -1038,14 +1040,15 @@ impl error::Error for FromUtf8Error {
 
 impl fmt::Display for FromUtf8Error {
     #[inline]
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.err)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::ext_vec::ByteVec;
+    use ext_slice::B;
+    use ext_vec::ByteVec;
 
     #[test]
     fn insert() {
