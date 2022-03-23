@@ -67,20 +67,20 @@ mod bstring {
     use std::iter::FromIterator;
     use std::ops;
 
-    use crate::bstr::BStr;
-    use crate::bstring::BString;
-    use crate::ext_vec::ByteVec;
+    use bstr::BStr;
+    use bstring::BString;
+    use ext_vec::ByteVec;
 
     impl fmt::Display for BString {
         #[inline]
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             fmt::Display::fmt(self.as_bstr(), f)
         }
     }
 
     impl fmt::Debug for BString {
         #[inline]
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             fmt::Debug::fmt(self.as_bstr(), f)
         }
     }
@@ -308,15 +308,15 @@ mod bstr {
     use core::fmt;
     use core::ops;
 
-    use crate::bstr::BStr;
-    use crate::ext_slice::ByteSlice;
+    use bstr::BStr;
+    use ext_slice::ByteSlice;
 
     impl fmt::Display for BStr {
         #[inline]
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             /// Write the given bstr (lossily) to the given formatter.
             fn write_bstr(
-                f: &mut fmt::Formatter<'_>,
+                f: &mut fmt::Formatter,
                 bstr: &BStr,
             ) -> Result<(), fmt::Error> {
                 for chunk in bstr.utf8_chunks() {
@@ -329,10 +329,7 @@ mod bstr {
             }
 
             /// Write 'num' fill characters to the given formatter.
-            fn write_pads(
-                f: &mut fmt::Formatter<'_>,
-                num: usize,
-            ) -> fmt::Result {
+            fn write_pads(f: &mut fmt::Formatter, num: usize) -> fmt::Result {
                 let fill = f.fill();
                 for _ in 0..num {
                     f.write_fmt(format_args!("{}", fill))?;
@@ -375,7 +372,7 @@ mod bstr {
 
     impl fmt::Debug for BStr {
         #[inline]
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
             write!(f, "\"")?;
             for (s, e, ch) in self.char_indices() {
                 match ch {
@@ -688,7 +685,7 @@ mod bstr_serde {
         Serializer,
     };
 
-    use crate::bstr::BStr;
+    use bstr::BStr;
 
     impl Serialize for BStr {
         #[inline]
@@ -747,7 +744,7 @@ mod bstring_serde {
         Serialize, Serializer,
     };
 
-    use crate::bstring::BString;
+    use bstring::BString;
 
     impl Serialize for BString {
         #[inline]
@@ -827,8 +824,8 @@ mod bstring_serde {
 
 #[cfg(test)]
 mod display {
-    use crate::bstring::BString;
     use crate::ByteSlice;
+    use bstring::BString;
 
     #[test]
     fn clean() {
@@ -926,7 +923,7 @@ mod display {
         );
     }
 
-    quickcheck::quickcheck! {
+    quickcheck! {
         fn total_length(bstr: BString) -> bool {
             let size = bstr.chars().count();
             format!("{:<1$}", bstr.as_bstr(), size).chars().count() >= size
@@ -936,7 +933,7 @@ mod display {
 
 #[cfg(test)]
 mod bstring_arbitrary {
-    use crate::bstring::BString;
+    use bstring::BString;
 
     use quickcheck::{Arbitrary, Gen};
 
