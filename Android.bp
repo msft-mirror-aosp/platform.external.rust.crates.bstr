@@ -44,19 +44,22 @@ rust_library {
     host_supported: true,
     crate_name: "bstr",
     cargo_env_compat: true,
-    cargo_pkg_version: "0.2.17",
+    cargo_pkg_version: "1.0.1",
     srcs: ["src/lib.rs"],
-    edition: "2018",
+    edition: "2021",
     features: [
+        "alloc",
         "default",
-        "lazy_static",
-        "regex-automata",
         "std",
         "unicode",
     ],
     rustlibs: [
-        "liblazy_static",
         "libmemchr",
+        "libonce_cell",
         "libregex_automata",
+    ],
+    apex_available: [
+        "//apex_available:platform",
+        "//apex_available:anyapex",
     ],
 }
