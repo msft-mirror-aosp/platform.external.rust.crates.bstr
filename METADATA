@@ -11,13 +11,13 @@ third_party {
   }
   url {
     type: ARCHIVE
-    value: "https://static.crates.io/crates/bstr/bstr-1.0.1.crate"
+    value: "https://static.crates.io/crates/bstr/bstr-1.1.0.crate"
   }
-  version: "1.0.1"
+  version: "1.1.0"
   license_type: NOTICE
   last_upgrade_date {
-    year: 2022
-    month: 12
-    day: 12
+    year: 2023
+    month: 2
+    day: 1
   }
 }
